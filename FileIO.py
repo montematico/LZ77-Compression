@@ -10,31 +10,22 @@ class FileIO:
         else:
             logging.basicConfig(level=logging.INFO)
 
-    def read(self, filename=None):
-        # Use the provided filename, or default to self.filename
-        filename = filename or self.filename
-        if not filename:
-            self.logger.error("No filename provided for reading.")
-            raise ValueError("Filename must be provided.")
+    @staticmethod
+    def read(filename):
         try:
             with open(filename, 'rb') as f:
                 data = f.read()
-                self.logger.info(f"Read {len(data)} bytes from {filename}")
-                return data  # Return data as bytes
+                return data
         except Exception as e:
-            self.logger.error(f"Failed to read from {filename}: {e}")
-            raise
+            print(f"Failed to read from {filename}: {e}")
+            raise RuntimeError(f"Failed to read from {filename}: {e}")
 
-    def write(self, data, filename=None):
-        # Use the provided filename, or default to self.filename
-        filename = filename or self.filename
-        if not filename:
-            self.logger.error("No filename provided for writing.")
-            raise ValueError("Filename must be provided.")
+    @staticmethod
+    def write(data, filename):
         try:
             with open(filename, 'wb') as f:
                 f.write(data)
-                self.logger.info(f"Wrote {len(data)} bytes to {filename}")
         except Exception as e:
-            self.logger.error(f"Failed to write to {filename}: {e}")
-            raise
+            print(f"Failed to write to {filename}: {e}")
+            raise RuntimeError(f"Failed to write to {filename}: {e}")
+

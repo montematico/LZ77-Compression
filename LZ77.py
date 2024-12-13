@@ -20,13 +20,10 @@ class LiteralToken:
 
 
 class LZ77(object):
-    #all these in bytes
-
-
+    literal_buffer = []
+    compressed_data = []
+    #All the object variables, kept in a function so they can be dynamically set. (and bc it gets called twice for encoding and decoding)
     def _var_init(self):
-        #todo set these to higher, more realistic values
-        #self.control_byte_length = 2 #how many bytes to use to encode either [signal,length] for literal or [signal, length, distance] for match
-        #1 bit for signal, [signal+length].bits + [distance].bits = control_byte_length*8
         # Total bits in the control bytes
         self.total_bits = self.control_byte_length * 8
 
@@ -48,16 +45,6 @@ class LZ77(object):
         self.lookahead_buffer = 2**self.max_pointer_length_bits -1 #7 bits used to store the length of a match
 
 
-    literal_buffer = []
-    compressed_data = []
-    raw_data = None #gets initialized in __init__
-
-    # Determine bit allocations based on control_byte_length
-    #total_bits = self.control_byte_length * 8
-    #length_bits = total_bits // 3
-    #distance_bits = total_bits - length_bits - 1  # Remaining bits after signal and length
-
-
     def __init__(self, data, control_bytes = 3):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.control_byte_length = control_bytes #Assigns this so _var_init can work it.
@@ -67,7 +54,36 @@ class LZ77(object):
         self.raw_data = np.frombuffer(data, dtype=np.uint8)
         self._var_init()
 
+    @staticmethod
+    def compress(data, control_bytes=3):
+        """
+        Compresses the input data using LZ77.
+        :param data: The raw data to compress (bytes-like).
+        :param control_bytes: The number of bytes for control structures.
+        :return: Compressed data as bytes.
+        """
+        # Initialize an instance for variable setup and helper methods
+        instance = LZ77(data, control_bytes)
+        instance.tokenize()  # Generate tokens
+        return instance.encode()  # Serialize the compressed tokens
+
+    @staticmethod
+    def decompress(to_decompress):
+        """
+        Decompresses the compressed data using LZ77.
+        :param to_decompress: The compressed data to decompress (bytes-like).
+        :return: Decompressed data as bytes.
+        """
+        # Create a temporary instance to handle the decode
+        instance = LZ77(b"")  # Initialize with dummy data
+        return instance.decode(to_decompress)
+
+
     def encode(self):
+        """
+        Encodes the compressed data into a byte stream.
+        :return: Serialized byte stream of the compressed data.
+        """
         #init serialized data array
         serialized_data = bytearray()
         # Generate header, and prepend to data
@@ -108,6 +124,11 @@ class LZ77(object):
         return bytes(serialized_data)
 
     def decode(self, compressed_bytes):
+        """
+        Decodes the compressed byte stream into the original data. Reads header to find control byte length.
+        :param compressed_bytes: compressed LZ77 data as bytes
+        :return: decoded data as bytes
+        """
         # Parse the header
         control_byte_length, compressed_bytes = self.parse_header(compressed_bytes)
 
@@ -154,6 +175,10 @@ class LZ77(object):
         return bytes(decompressed_data)
 
     def tokenize(self):
+        """
+        Tokenizes the raw data using LZ77. Creating literal and match tokens
+        :return: Compressed data as a list of tokens.
+        """
         # Tokenize the raw data using LZ77. Tokens can then be used to create a compressed stream.
         i = 0
         data_length = self.raw_data.size
@@ -188,6 +213,8 @@ class LZ77(object):
                     # No further match; break out of the loop
                     break
 
+
+            #checks min size requirement for match
             if best_match_length > self.control_byte_length:
                 self._createPointer(best_match_distance, best_match_length)
                 i += best_match_length
@@ -204,6 +231,7 @@ class LZ77(object):
 
         self.logger.info(f"idx: {i}, data_length: {data_length}")
         return self.compressed_data
+
 
     def _createBitMask(self, isLiteral=True):
         """
@@ -233,6 +261,10 @@ class LZ77(object):
 
 #create tokens for compressed stream
     def _createLiteral(self):
+        """
+        Creates a literal token from the literal buffer and appends it to the compressed data.
+        :return: None
+        """
         #empties literal buffer and creates a literal token
         if len(self.literal_buffer) == 0: return #no literal to output
 
@@ -243,6 +275,12 @@ class LZ77(object):
         #self.logger.info(f"Literal: Length= {LiToken.length}, Data= {LiToken.data}")
 
     def _createPointer(self, distance, length):
+        """
+        Creates a pointer token from the given distance and length, and appends it to the compressed data.
+        :param distance: distance to match
+        :param length: length of match
+        :return: None
+        """
         #creates a pointer token, empties literal buffer before
         if len(self.literal_buffer) > 0:
             self._createLiteral()
@@ -252,7 +290,12 @@ class LZ77(object):
         #self.logger.info(f"Pointer: {PToken}")
 
     def _find_subarray(self, array, subarray):
-        """Helper function to find a subarray within an array."""
+        """
+        Helper function to find a subarray within an array.
+        :param array:
+        :param subarray:
+        :return:
+        """
         len_sub = len(subarray)
         if len_sub == 0:
             return -1
@@ -267,6 +310,7 @@ class LZ77(object):
         Generates a 2-byte header for the compressed stream.
         Byte 1: Magic number (0xC7 for LZ77-compressed stream).
         Byte 2: High 4 bits encode the control_byte_length (1–15), low 4 bits reserved.
+        :return: 2-byte header as bytes
         """
         if not (1 <= self.control_byte_length <= 15):
             raise ValueError("control_byte_length must be between 1 and 15.")
@@ -281,8 +325,10 @@ class LZ77(object):
     def parse_header(compressed_stream):
         """
         Parses the 2-byte header from the compressed stream.
-        Returns the control_byte_length and the remaining stream.
+        :param compressed_stream:
+        :return:  Returns the control_byte_length and the remaining stream:
         """
+
         if len(compressed_stream) < 2:
             raise ValueError("Compressed stream is too short to contain a valid header.")
 
@@ -304,7 +350,11 @@ class LZ77(object):
         """
         Reads the first 2 bytes of the file and checks for a valid header.
         Returns True if the header is valid, False otherwise.
+        :param file_path:
+        :return:
         """
+
+
         try:
             with open(file_path, "rb") as f:
                 header = f.read(2)

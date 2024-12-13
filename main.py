@@ -1,6 +1,6 @@
 import OffsetEncryption as crypt
-import LZ77 as lz
-import FileIO as fio
+from LZ77 import LZ77
+from FileIO import FileIO as fio
 import GUI as gui
 from OffsetEncryption import OffsetEncrypt
 import logging
@@ -8,13 +8,19 @@ import logging
 
 if __name__ == "__main__":
 
+    if True:
+        comp = LZ77.compress(fio.read("TESTDATA.txt"),3)  # inits LZ77 encoder
+        print(comp)
+
+        decomp = LZ77.decompress(comp)
+        print(decomp)
     if False: #Compressing loop
         logging.basicConfig(level=logging.INFO)
         # Sample data
-        fs = fio.FileIO("TESTDATA.txt")
-        data = fs.read()
+        #fs = fio.FileIO("TESTDATA.txt")
+        data = FileIO.read("TESTDATA.txt")
         # Initialize the LZ77 compressor
-        lz77 = lz.LZ77(data,control_bytes=3)
+        lz77 = LZ77.LZ77(data,control_bytes=3)
         lz77.tokenize()  # Generate tokens
         # Encode the tokens into a byte stream
         compressed_bytes = lz77.encode()
@@ -33,6 +39,6 @@ if __name__ == "__main__":
         raw_decrypted = off.decrypt(compr_encrypted)
         print("Decrypted Data:", raw_decrypted)
 
-    if True: #GUI loop
+    if False: #GUI loop
         g = gui.GUI()
         g.main_menu()

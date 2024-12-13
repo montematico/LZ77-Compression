@@ -1,5 +1,6 @@
 import PySimpleGUI as sg
-from LZ77 import LZ77  # Importing only to use the static method verify_header
+from LZ77 import LZ77
+from FileIO import FileIO as fio
 
 class GUI:
     def __init__(self):
@@ -22,14 +23,20 @@ class GUI:
             window["-ENCRYPT-"].update(visible=False)
             window["-DECOMPRESS-"].update(visible=True)
             window["-DECRYPT-"].update(visible=True)
-            sg.popup("Valid header detected! Ready to Decompress/Decrypt.", title="File Status")
+
+            #Compression logic
+            lz = LZ77.LZ77(fio.Read(file_path)) #inits LZ77 encoder
+            lz.compress() #compresses the file
+
+
+
         else:
             # File does not have a valid header: Hide "Decompress" and "Decrypt" buttons, show "Compress" and "Encrypt" buttons
             window["-DECOMPRESS-"].update(visible=False)
             window["-DECRYPT-"].update(visible=False)
             window["-COMPRESS-"].update(visible=True)
             window["-ENCRYPT-"].update(visible=True)
-            sg.popup("No valid header detected. Ready to Compress/Encrypt.", title="File Status")
+
 
     def main_menu(self):
         layout = [
