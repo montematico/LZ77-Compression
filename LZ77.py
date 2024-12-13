@@ -7,105 +7,151 @@ import numpy as np
 
 @dataclass
 class MatchToken:
-    dist: np.uint16
-    length: np.uint8
+    dist: np.uint32
+    length: np.uint32
     type: bool = field(default=True)
 
 @dataclass
 class LiteralToken:
-    length: np.uint16 #length of literal run, in bytes
-    data: np.array([], dtype=np.uint8) #stores up to a maximum of length bytes
+    length: np.uint32 #length of literal run, in bytes
+    data: np.array([], dtype=np.uint32) #stores up to a maximum of length bytes
     type: bool = field(default=False)
 
-# class LZ77(object):
-#     def __init__(self):
-#         self.compressed = []
-#         self.decompressed = []
-#         # Initialize buffers as NumPy arrays
-#         self.raw_data = np.array([], dtype=np.uint8)
 
 
 class LZ77(object):
     #all these in bytes
-    #todo set these to higher, more realistic values
-    control_byte_length = 3 #how many bytes to use to encode either [signal,length] for literal or [signal, length, distance] for match
-    #1 bit for signal, [signal+length].bits + [distance].bits = control_byte_length*8
 
 
-    max_literal_length = 127 #max length of a run of literals to output (7 bits)
-    window_size = 2**16-1 #16 bits is maximum distance from current position to search buffer, so window does not need to be larger
-    lookahead_buffer = 2**7 -1 #7 bits used to store the length of a match
-    min_pointer_size = 3 #pointers are 3 bytes long. So if a match is less than 3 bytes, it's not worth it
+    def _var_init(self):
+        #todo set these to higher, more realistic values
+        #self.control_byte_length = 2 #how many bytes to use to encode either [signal,length] for literal or [signal, length, distance] for match
+        #1 bit for signal, [signal+length].bits + [distance].bits = control_byte_length*8
+        # Total bits in the control bytes
+        self.total_bits = self.control_byte_length * 8
+
+        # Reserve 1 bit for the signal
+        usable_bits = self.total_bits - 1
+        self.literal_length_bits = usable_bits; #for literal runs all bits are used for length (- 1 for signal)
+        # Allocate 1/3 of the usable bits to length (rounded down)
+        self.max_pointer_length_bits = usable_bits // 3
+        # Remaining bits are for the distance
+        self.pointer_distance_bits = usable_bits - self.max_pointer_length_bits
+
+        # Calculate the actual limits
+        self.max_literal_length = (1 << self.max_pointer_length_bits) - 1
+        self.max_distance = (1 << self.pointer_distance_bits) - 1
+        self.max_pointer_length = (1 << self.max_pointer_length_bits) - 1
+
+        #Set the window size and lookahead buffer size based off of the control byte length
+        self.window_size = 2**self.pointer_distance_bits-1 #maximum distance from current position to search buffer, (2/3rd of control byte)
+        self.lookahead_buffer = 2**self.max_pointer_length_bits -1 #7 bits used to store the length of a match
+
 
     literal_buffer = []
     compressed_data = []
     raw_data = None #gets initialized in __init__
 
-    def decode(self, compressed_bytes):
-        decompressed_data = bytearray()
-        i = 0
-        while i < len(compressed_bytes):
-            signal_and_length = compressed_bytes[i]
-            signal_flag = (signal_and_length & 0b10000000) >> 7
-            length = signal_and_length & 0b01111111
-            i += 1
-            if signal_flag == 1:
-                # MatchToken
-                dist = int.from_bytes(compressed_bytes[i:i + 2], 'big')
-                i += 2
-                # Retrieve the matched data from the decompressed data
-                start_idx = len(decompressed_data) - dist
-                for _ in range(length):
-                    decompressed_data.append(decompressed_data[start_idx])
-                    start_idx += 1
-            else:
-                # LiteralToken
-                literal_data = compressed_bytes[i:i + length]
-                i += length
-                decompressed_data.extend(literal_data)
-        return bytes(decompressed_data)
+    # Determine bit allocations based on control_byte_length
+    #total_bits = self.control_byte_length * 8
+    #length_bits = total_bits // 3
+    #distance_bits = total_bits - length_bits - 1  # Remaining bits after signal and length
 
-    def __init__(self, data, window_size=None, lookahead_buffer=None):
+
+    def __init__(self, data, control_bytes = 3):
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.control_byte_length = control_bytes #Assigns this so _var_init can work it.
 
         # Assume 'data' is a list or array of integers representing bytes
         #self.raw_data = np.array([bytes(i) for i in data], dtype=np.uint8)
         self.raw_data = np.frombuffer(data, dtype=np.uint8)
-        self.window_size = window_size or self.window_size
-        self.lookahead_buffer = lookahead_buffer or self.lookahead_buffer
-
-
+        self._var_init()
 
     def encode(self):
-        # Initialize a bytearray to collect the serialized tokens
+        #init serialized data array
         serialized_data = bytearray()
-        #Bitmask does not change throughout encoding process so we can do it here to not recompute
-        LiteralMask = _createBitMask(isLiteral = True)
-        PointerMask = _createBitMask(isLiteral = False)
+        # Generate header, and prepend to data
+        header = self._generate_header()
+        serialized_data.extend(header)
+
+        # Generate bitmasks for literals and pointers
+        signal_mask = 0b1 << (self.total_bits - 1)  # MSB is the signal bit
+        length_mask = (1 << self.literal_length_bits) - 1
+        distance_mask = (1 << self.pointer_distance_bits) - 1
 
         # Iterate over the compressed data and serialize each token
         for token in self.compressed_data:
             if isinstance(token, MatchToken):
-                # Signal flag is 1, represented in the most significant bit of the first byte
-                # We'll pack the signal flag and length into a single byte
-               signal_and_length = PointerMask(1) | (token.length & PointerMask(2))
+                # Signal flag is 1
+                signal_and_length = signal_mask | ((token.length & length_mask) << self.pointer_distance_bits)
+                signal_and_length |= (token.dist & distance_mask)
 
-                signal_and_length = 0b10000000 | (token.length & 0b01111111)  # 1-bit flag + 7-bit length
-                serialized_data.append(signal_and_length)  # Add the signal and length byte
-                # Add the distance (2 bytes)
-                serialized_data.extend(token.dist.to_bytes(2, 'big'))
+                # Write exactly `control_byte_length` bytes for the control field
+                control_bytes = signal_and_length.to_bytes(self.control_byte_length, 'big')
+                serialized_data.extend(control_bytes)
+
             elif isinstance(token, LiteralToken):
-                # Signal flag is 0, represented in the most significant bit of the first byte
-                # Length is up to max_literal_length (assumed to fit in 7 bits)
-                signal_and_length = (token.length & 0b01111111)  # 1-bit flag is 0, so we only need the length
-                serialized_data.append(signal_and_length)  # Add the signal and length byte
+                # Signal flag is 0
+                signal_and_length = (token.length & ((1 << (self.total_bits - 1)) - 1))
+
+                # Write exactly `control_byte_length` bytes for the control field
+                control_bytes = signal_and_length.to_bytes(self.control_byte_length, 'big')
+                serialized_data.extend(control_bytes)
+
                 # Add the literal data
                 serialized_data.extend(token.data)
+
             else:
                 raise ValueError("Unknown token type encountered during encoding")
 
         # Return the serialized byte stream
         return bytes(serialized_data)
+
+    def decode(self, compressed_bytes):
+        # Parse the header
+        control_byte_length, compressed_bytes = self.parse_header(compressed_bytes)
+
+        # Update the control_byte_length dynamically
+        self.control_byte_length = control_byte_length
+        self._var_init() #updates the rest of the vars accordingly
+
+        decompressed_data = bytearray()
+        i = 0
+
+        while i < len(compressed_bytes):
+            # Read exactly `control_byte_length` bytes for the control field
+            signal_and_length = int.from_bytes(compressed_bytes[i:i + self.control_byte_length], 'big')
+            i += self.control_byte_length
+
+            # Extract the signal bit (MSB)
+            signal_flag = (signal_and_length >> (self.total_bits - 1)) & 0b1
+
+            if signal_flag == 1:
+                # MatchToken: Extract length and distance
+                length = (signal_and_length >> self.pointer_distance_bits) & ((1 << self.max_pointer_length_bits) - 1)
+                dist = signal_and_length & ((1 << self.pointer_distance_bits) - 1)
+
+                # Retrieve the matched data from the decompressed data
+                start_idx = len(decompressed_data) - dist
+                if start_idx < 0:
+                    raise ValueError(f"Invalid start index {start_idx} during decoding.")
+
+                for _ in range(length):
+                    decompressed_data.append(decompressed_data[start_idx])
+                    start_idx += 1
+
+            else:
+                # LiteralToken: Extract length and literal data
+                length = signal_and_length & ((1 << (self.total_bits - 1)) - 1)
+
+                # Read the literal data
+                literal_data = compressed_bytes[i:i + length]
+                i += length
+
+                # Add to decompressed data
+                decompressed_data.extend(literal_data)
+
+        return bytes(decompressed_data)
 
     def tokenize(self):
         # Tokenize the raw data using LZ77. Tokens can then be used to create a compressed stream.
@@ -142,7 +188,7 @@ class LZ77(object):
                     # No further match; break out of the loop
                     break
 
-            if best_match_length > self.min_pointer_size:
+            if best_match_length > self.control_byte_length:
                 self._createPointer(best_match_distance, best_match_length)
                 i += best_match_length
             else:
@@ -194,7 +240,7 @@ class LZ77(object):
         self.literal_buffer = [] #empties the literal buffer
         self.compressed_data.append(LiToken) #appends the literal token to the compressed data
 
-        self.logger.info(f"Literal: Length= {LiToken.length}, Data= {LiToken.data}")
+        #self.logger.info(f"Literal: Length= {LiToken.length}, Data= {LiToken.data}")
 
     def _createPointer(self, distance, length):
         #creates a pointer token, empties literal buffer before
@@ -203,7 +249,7 @@ class LZ77(object):
 
         PToken = MatchToken(distance, length)
         self.compressed_data.append(PToken)
-        self.logger.info(f"Pointer: {PToken}")
+        #self.logger.info(f"Pointer: {PToken}")
 
     def _find_subarray(self, array, subarray):
         """Helper function to find a subarray within an array."""
@@ -216,3 +262,54 @@ class LZ77(object):
                 return k
         return -1
 
+    def _generate_header(self):
+        """
+        Generates a 2-byte header for the compressed stream.
+        Byte 1: Magic number (0xC7 for LZ77-compressed stream).
+        Byte 2: High 4 bits encode the control_byte_length (1–15), low 4 bits reserved.
+        """
+        if not (1 <= self.control_byte_length <= 15):
+            raise ValueError("control_byte_length must be between 1 and 15.")
+
+        magic_number = 0xC7  # Arbitrary identifier for compressed stream
+        control_byte_length_encoded = (self.control_byte_length & 0x0F) << 4  # High nibble
+        reserved = 0x00  # Low nibble reserved for future use
+        header = bytearray([magic_number, control_byte_length_encoded | reserved])
+        return header
+
+    @staticmethod
+    def parse_header(compressed_stream):
+        """
+        Parses the 2-byte header from the compressed stream.
+        Returns the control_byte_length and the remaining stream.
+        """
+        if len(compressed_stream) < 2:
+            raise ValueError("Compressed stream is too short to contain a valid header.")
+
+        magic_number = compressed_stream[0]
+        if magic_number != 0xC7:
+            raise ValueError("Invalid magic number. Not an LZ77-compressed stream.")
+
+        # Extract control_byte_length from the high nibble of the second byte
+        control_byte_length = (compressed_stream[1] >> 4) & 0x0F
+        if not (1 <= control_byte_length <= 15):
+            raise ValueError("Invalid control_byte_length in header.")
+
+        # Return control_byte_length and the rest of the stream
+        return control_byte_length, compressed_stream[2:]
+
+    #not used within the class, but by other elements to verify the header
+    @staticmethod
+    def verify_header(file_path):
+        """
+        Reads the first 2 bytes of the file and checks for a valid header.
+        Returns True if the header is valid, False otherwise.
+        """
+        try:
+            with open(file_path, "rb") as f:
+                header = f.read(2)
+            # Check for the magic number 0xC7 and validate header
+            return len(header) == 2 and header[0] == 0xC7
+        except Exception as e:
+            print(f"Error checking header: {e}")
+            return False
