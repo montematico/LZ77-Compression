@@ -1,11 +1,7 @@
 import pytest
 import os
 import logging
-
-from Tools.demo.eiffel import Tests
-
 from LZ77 import LZ77
-
 import pytest
 from LZ77 import LZ77, MatchToken, LiteralToken
 
