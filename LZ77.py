@@ -1,21 +1,53 @@
 from dataclasses import dataclass, field
 import logging
-from urllib.parse import to_bytes
-
+# from urllib.parse import to_bytes
 import numpy as np
 
+#todo
+# 1. iff control_byte_size is 1, no compression occurs, consider adding a special case for this
+# 2. Processing PDF's seems really slow
+# 3. The whole thing is really slow, consider optimizing
 
 @dataclass
 class MatchToken:
-    dist: np.uint32
-    length: np.uint32
-    type: bool = field(default=True)
+    """
+       Represents a match token in LZ77 compression.
+
+       Attributes:
+           dist (np.uint32):
+               The distance from the current position to the start of the matching substring
+               in the sliding window (search buffer). A smaller value indicates a closer match.
+           length (np.uint32):
+               The length of the matching substring (in bytes). Represents how many bytes
+               can be copied from the reference in the search buffer.
+           type (bool):
+               A flag that identifies the token type. This is always `True` for MatchToken,
+               differentiating it from LiteralToken.
+       """
+    dist: np.uint32 #(backwards) distance from current position to start of match
+    length: np.uint32 #length of match, in bytes
+    type: bool = field(default=True) #flag to identify token type, will always be true for matches
 
 @dataclass
 class LiteralToken:
+    """
+        Represents a literal token in LZ77 compression.
+
+        Attributes:
+            length (np.uint32):
+                The number of bytes in the literal run. This indicates how many bytes
+                will be copied directly to the output without referencing prior data.
+            data (np.array):
+                A NumPy array containing the raw byte values of the literal run. Each element
+                represents one byte of uncompressed data.
+            type (bool):
+                A flag that identifies the token type. This is always `False` for LiteralToken,
+                differentiating it from MatchToken.
+        """
+    #idk why but adding an __init__ function, even a dummy one breaks this
     length: np.uint32 #length of literal run, in bytes
-    data: np.array([], dtype=np.uint32) #stores up to a maximum of length bytes
-    type: bool = field(default=False)
+    data: np.array([], dtype=np.uint32) #literal run data thats being encoded
+    type: bool = field(default=False) #flag to identify token type, will alawys be false for literals
 
 
 
@@ -47,7 +79,10 @@ class LZ77(object):
 
     def __init__(self, data, control_bytes = 3):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.control_byte_length = control_bytes #Assigns this so _var_init can work it.
+
+        if not (1 <= control_bytes <= 15):
+            raise ValueError("control_byte_length must be between 1 and 15.")
+        else: self.control_byte_length = control_bytes #Assigns this so _var_init can work it.
 
         # Assume 'data' is a list or array of integers representing bytes
         #self.raw_data = np.array([bytes(i) for i in data], dtype=np.uint8)
@@ -312,8 +347,7 @@ class LZ77(object):
         Byte 2: High 4 bits encode the control_byte_length (1–15), low 4 bits reserved.
         :return: 2-byte header as bytes
         """
-        if not (1 <= self.control_byte_length <= 15):
-            raise ValueError("control_byte_length must be between 1 and 15.")
+
 
         magic_number = 0xC7  # Arbitrary identifier for compressed stream
         control_byte_length_encoded = (self.control_byte_length & 0x0F) << 4  # High nibble
@@ -329,7 +363,7 @@ class LZ77(object):
         :return:  Returns the control_byte_length and the remaining stream:
         """
 
-        if len(compressed_stream) < 2:
+        if len(compressed_stream) <= 2:
             raise ValueError("Compressed stream is too short to contain a valid header.")
 
         magic_number = compressed_stream[0]
@@ -351,10 +385,8 @@ class LZ77(object):
         Reads the first 2 bytes of the file and checks for a valid header.
         Returns True if the header is valid, False otherwise.
         :param file_path:
-        :return:
+        :return: Bool, true if header is valid, false otherwise
         """
-
-
         try:
             with open(file_path, "rb") as f:
                 header = f.read(2)

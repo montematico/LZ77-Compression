@@ -2,6 +2,26 @@ import pytest
 import os
 from FileIO import FileIO
 
+#I think I've tested just about everything for this, it reads and writes fine
+
+@pytest.fixture
+def txt_data():
+    """
+    Fixture to read a text file.
+    :return: loaded txt data
+    """
+    with open(os.path.join(os.path.dirname(__file__), "test_data", "act1scene1.txt"), "rb") as f:
+        return f.read()
+
+@pytest.fixture
+def pdf_data():
+    """
+    Fixture to read a PDF file.
+    :return: loaded pdf data
+    """
+    with open(os.path.join(os.path.dirname(__file__), "test_data", "testpdf.pdf"), "rb") as f:
+        return f.read()
+
 @pytest.fixture
 def temp_file(tmp_path):
     """
@@ -65,3 +85,49 @@ def test_write_empty_data(tmp_path):
     with open(file_path, "rb") as f:
         content = f.read()
     assert content == b"", "Expected empty file but got non-empty content."
+
+def test_write_pdf(pdf_data, tmp_path):
+    """
+    Test writing PDF data.
+    """
+    pdf_file = tmp_path / "test_pdf.pdf"
+    FileIO.write(pdf_data, pdf_file)
+
+    # Verify the file was written
+    with open(pdf_file, "rb") as f:
+        content = f.read()
+    assert content == pdf_data, "PDF data read/write mismatch."
+
+def test_read_pdf(pdf_data, tmp_path):
+    """
+    Test reading PDF data.
+    """
+    pdf_file = tmp_path / "test_pdf.pdf"
+    with open(pdf_file, "wb") as f:
+        f.write(pdf_data)
+
+    data = FileIO.read(pdf_file)
+    assert data == pdf_data, "PDF data read mismatch."
+
+def test_write_txt(txt_data, tmp_path):
+    """
+    Test writing PDF data.
+    """
+    txt_file = tmp_path / "test_txt.txt"
+    FileIO.write(txt_data, txt_file)
+
+    # Verify the file was written
+    with open(txt_file, "rb") as f:
+        content = f.read()
+    assert content == txt_data, "TXT data read/write mismatch."
+
+def test_read_txt(txt_data, tmp_path):
+    """
+    Test reading PDF data.
+    """
+    txt_file = tmp_path / "test_txt.txt"
+    with open(txt_file, "wb") as f:
+        f.write(txt_data)
+
+    data = FileIO.read(txt_file)
+    assert data == txt_data, "TXT data read mismatch."
