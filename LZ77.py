@@ -135,6 +135,7 @@ class LZ77(object):
         0x8: ".py",
         0x9: ".html",
         0xA: ".md",
+        0xB: ".xml"
         # Add up to 16 extensions as needed
     }
     def _var_init(self):
@@ -186,7 +187,7 @@ class LZ77(object):
             raise ValueError("control_byte_length must be between 1 and 15.")
         else: self.control_byte_length = control_bytes #Assigns this so _var_init can work it.
         self.extension = extension
-
+        print(f"Initialized LZ77 with extension: {self.extension}")
         # Assume 'data' is a list or array of integers representing bytes
         #self.raw_data = np.array([bytes(i) for i in data], dtype=np.uint8)
         self.raw_data = np.frombuffer(data, dtype=np.uint8)
@@ -269,10 +270,9 @@ class LZ77(object):
         :return: decoded data as bytes
         """
         # Parse the header
-        control_byte_length, compressed_bytes = self.__parse_header(compressed_bytes)
-
-        # Update the control_byte_length dynamically
+        control_byte_length, extension, compressed_bytes = self.__parse_header(compressed_bytes)
         self.control_byte_length = control_byte_length
+        self.extension = extension
         self._var_init() #updates the rest of the vars accordingly
 
         decompressed_data = bytearray()
@@ -459,6 +459,7 @@ class LZ77(object):
         # Map the file extension to a 4-bit code
         extension_code = {v: k for k, v in self.EXTENSION_MAP.items()}.get(self.extension, 0x0)  # Default to 0 (no extension)
         header = bytearray([magic_number, control_byte_length_encoded | extension_code])
+        print(f"Encoding header with extension: {self.extension}, code: {extension_code}")
         return header
 
 
@@ -479,9 +480,10 @@ class LZ77(object):
         if not (1 <= control_byte_length <= 15):
             raise ValueError("Invalid control_byte_length in header.")
 
-        extension_code = compressed_stream[1] & 0x0F
+        extension_code = compressed_stream[1] & 0x0F #last 4 bits
         extension = self.EXTENSION_MAP.get(extension_code, "")
 
+        print(f"Decoded extension code: {extension_code}, extension: {extension}")
         return control_byte_length, extension, compressed_stream[2:]
 
     #not used within the class, but by other elements to verify the header
@@ -496,11 +498,13 @@ class LZ77(object):
         try:
             with open(file_path, "rb") as f:
                 header = f.read(2)
+                lz = LZ77(b"") #init LZ object to parse header
+                _,extension,_ = lz._LZ77__parse_header(header) #grabs extension
             # Check for the magic number 0xC7 and validate header
-            return len(header) == 2 and header[0] == 0xC7
+            return (len(header) == 2 and header[0] == 0xC7), extension
         except Exception as e:
             print(f"Error checking header: {e}")
-            return False
+            return False, ""
 
 if __name__ == "__main__":
     main()

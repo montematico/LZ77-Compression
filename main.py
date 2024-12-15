@@ -1,11 +1,11 @@
 import OffsetEncryption as crypt
 from LZ77 import LZ77
 from FileIO import FileIO as fio
+import os
 import GUI as gui
-from OffsetEncryption import OffsetEncrypt
 import logging
 import pydoc
-# Open the file in binary mode
+
 
 if __name__ == "__main__":
 
@@ -32,24 +32,23 @@ if __name__ == "__main__":
         print("Combined documentation written to documentation.html")
 
     #"Modern" Compression Loop using static methods
-    if False:
-        file = fio.read("Act1Scene1.txt")
+    if True:
+        fp = "Act1Scene1.md"
+        file = fio.read(fp)
 
-        comp = LZ77.compress(file,2)  #compresses
-        decomp = LZ77.decompress(comp)
+        comp = LZ77.compress(file,2,os.path.splitext(fp)[1])  #compresses
+        decomp,_ = LZ77.decompress(comp)
 
         print("Raw Size:" ,len(file))
         print("Compressed Size:" , len(comp))
         print("Decompressed Size:" , len(decomp))
         print("Compression Ratio:", len(comp)/len(file))
 
-
-
         print(comp)
         print(decomp)
 
 #The Old Way of doing compression, involves creating an object and calling methods
-    if False: #Compressing loop
+    if True: #Compressing loop
         logging.basicConfig(level=logging.INFO)
         # Sample data
         #fs = fio.FileIO("TESTDATA.txt")
@@ -65,7 +64,7 @@ if __name__ == "__main__":
         decompressed_data = lz77.decode(compressed_bytes)
         print("Decompressed Data:", decompressed_data)
 
-    if False: #Encrypting loop
+    if True: #Encrypting loop
         #Encrpyt the compressed data
         off = crypt.OffsetEncrypt(compressed_bytes,18)
         compr_encrypted = off.encrypt(compressed_bytes)
@@ -74,6 +73,6 @@ if __name__ == "__main__":
         raw_decrypted = off.decrypt(compr_encrypted)
         print("Decrypted Data:", raw_decrypted)
 
-    if False: #GUI loop
+    if True: #GUI loop
         g = gui.GUI()
-        g.main_menu()
+        g.__init__()

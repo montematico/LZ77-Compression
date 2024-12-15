@@ -59,7 +59,7 @@ def test_gui_compression(mock_popup, mock_write, mock_read, mock_compress, gui_i
             ("Exit", {})  # Exit event
         ]
 
-        gui_instance.main_menu()
+        gui_instance.__init__()
 
     # Verify compression was called
     mock_compress.assert_called_once_with(b"Test Data", 3)
@@ -86,7 +86,7 @@ def test_gui_decompression(mock_popup, mock_write, mock_read, mock_decompress, g
             ("Exit", {})  # Exit event
         ]
 
-        gui_instance.main_menu()
+        gui_instance.__init__()
 
     # Verify decompression was called
     mock_decompress.assert_called_once_with(b"Compressed Data")
@@ -145,7 +145,7 @@ def test_gui_compression_actual_reduction(mock_popup, mock_write, mock_read, moc
             ("Exit", {})  # Exit event
         ]
 
-        gui_instance.main_menu()
+        gui_instance.__init__()
 
     # Verify compression was called
     mock_compress.assert_called_once_with(b"Test DataTest DataTest DataTest Data", 3)
@@ -181,7 +181,7 @@ def test_gui_compression_empty_file(mock_popup, mock_write, mock_read, mock_comp
             ("Exit", {})  # Exit event
         ]
 
-        gui_instance.main_menu()
+        gui_instance.__init__()
 
     # Verify compression was called
     mock_compress.assert_called_once_with(b"", 3)
@@ -209,7 +209,7 @@ def test_gui_compression_large_file_txt(mock_popup, mock_write, mock_read, mock_
             ("Exit", {})  # Exit event
         ]
 
-        gui_instance.main_menu()
+        gui_instance.__init__()
 
     # Verify compression was called
     mock_compress.assert_called_once_with(txt_data, 3)
