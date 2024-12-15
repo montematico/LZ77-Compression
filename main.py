@@ -8,6 +8,7 @@ import pydoc
 # Open the file in binary mode
 
 if __name__ == "__main__":
+
     #Generate documentation
     if True:
         # Generate documentation for all modules
@@ -30,6 +31,7 @@ if __name__ == "__main__":
 
         print("Combined documentation written to documentation.html")
 
+    #"Modern" Compression Loop using static methods
     if False:
         file = fio.read("Act1Scene1.txt")
 
@@ -46,7 +48,7 @@ if __name__ == "__main__":
         print(comp)
         print(decomp)
 
-
+#The Old Way of doing compression, involves creating an object and calling methods
     if False: #Compressing loop
         logging.basicConfig(level=logging.INFO)
         # Sample data

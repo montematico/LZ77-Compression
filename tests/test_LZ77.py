@@ -1,7 +1,7 @@
 import pytest
 import os
+import subprocess
 import logging
-from LZ77 import LZ77
 import pytest
 from LZ77 import LZ77, MatchToken, LiteralToken
 
@@ -278,3 +278,108 @@ def test_verify_header():
     import os
     os.remove("valid_compressed_file.bin")
     os.remove("invalid_compressed_file.bin")
+
+def test_1_byte_var_init():
+    """
+    Test 1 control byte edge case
+    """
+    raw_data = b"coolcoolcool"  # Repeated pattern
+    lz = LZ77(raw_data, control_bytes=1)
+    #Checking the bit allocations
+    assert lz.control_byte_length == 1, "Control byte size should be 1"
+    assert lz.total_bits == 8, "Total bits should be 8"
+    assert lz.literal_length_bits == 7, "Literal length bits should be 7"
+    assert lz.max_pointer_length_bits == 3, "Max pointer length bits should be 2"
+    assert lz.pointer_distance_bits == 4, "Pointer distance bits should be 5"
+
+    #Check if limits are allocated correctly
+    assert lz.max_literal_length == 127, "Max literal length should be 128"
+    assert lz.max_distance == 15, "Max pointer distance should be 32"
+    assert lz.max_pointer_length == 7, "Max pointer length should be 3"
+
+    #Check if window allocations are correct
+    assert lz.window_size == 15, "Lookback Window size should be 15 bits"
+    assert lz.lookahead_buffer == 127, "Lookahead buffer should be 127 (to allow for max literal length)"
+
+def test_1_byte_header(data_short):
+    """
+    Test 1 control byte edge case with header generation
+    """
+    #Testing by directly manipulating fx
+    raw_data = data_short  # Repeated pattern
+    lz = LZ77(raw_data, control_bytes=1)
+    assert lz._LZ77__generate_header() == b"\xC7\x10", "Header generation failed"
+    comp = LZ77.compress(raw_data, control_bytes=1)
+    assert b"\xC7\x10" == comp[:2],  "Header byte missing"
+    byte_length, _ = LZ77.__parse_header(comp)
+    assert byte_length == 1, "Header byte length mismatch"
+
+
+@pytest.mark.parametrize("control_bytes", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+def test_1_byte_header(data_short, control_bytes):
+    """
+    Test 1 control byte edge case with header generation.
+    """
+    # Testing by directly manipulating fx
+    raw_data = data_short  # Repeated pattern
+    lz = LZ77(raw_data, control_bytes=control_bytes)
+
+    # Compress the data
+    comp = LZ77.compress(raw_data, control_bytes=control_bytes)
+
+    # Generate the expected header
+    magic_number = 0xC7  # Arbitrary identifier for LZ77
+    control_byte_header = (control_bytes & 0x0F) << 4  # High nibble for control_byte_length
+    expected_header = bytes([magic_number, control_byte_header])
+
+    # Assert the header is as expected
+    assert expected_header == comp[:2], f"Header mismatch. Expected {expected_header}, but got {comp[:2]}"
+
+    # Parse the header and assert consistency
+    byte_length, _ = LZ77.__parse_header(comp)
+    assert control_bytes == byte_length, f"Header byte length mismatch. Expected {control_bytes}, but got {byte_length}"
+
+
+def test_1_byte_compress(txt_data):
+    """
+    Test 1 control byte edge case with entire compression loop
+    """
+    raw_data = txt_data  # Repeated pattern
+    compressed = LZ77.compress(raw_data, control_bytes=1)
+    decompressed, _ = LZ77.decompress(compressed)
+    assert LZ77.verify_header(compressed) == True, "Header verification failed"
+    assert decompressed == raw_data, "Decompressed data does not match the original data."
+
+
+def test_arg_parse_compress(temp_file):
+    """
+    Test the command line argument parsing for compressing a file.
+    """
+
+
+    # Compress the temporary file
+    subprocess.run(["python", "LZ77.py", "-c", str(temp_file), "-cb", "2"], check=True)
+
+    # Verify the compressed file was created
+    compressed_file = temp_file.with_suffix(".Z77")
+    assert compressed_file.exists(), "Compressed file was not created."
+
+    # Verify the compressed file can be decompressed
+    subprocess.run(["python", "LZ77.py", "-d", str(compressed_file)], check=True)
+
+    # Verify the decompressed file was created
+    decompressed_file = temp_file.with_suffix(".txt")
+    assert decompressed_file.exists(), "Decompressed file was not created."
+
+    # Verify the decompressed file matches the original file
+    with open(temp_file, "rb") as f:
+        original_data = f.read()
+
+    with open(decompressed_file, "rb") as f:
+        decompressed_data = f.read()
+
+    assert decompressed_data == original_data, "Decompressed data does not match the original data."
+
+    # Cleanup
+    os.remove(compressed_file)
+    os.remove(decompressed_file)

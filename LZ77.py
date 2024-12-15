@@ -1,12 +1,81 @@
 from dataclasses import dataclass, field
 import logging
-# from urllib.parse import to_bytes
 import numpy as np
-
+import argparse
+import os
 #todo
-# 1. iff control_byte_size is 1, no compression occurs, consider adding a special case for this
-# 2. Processing PDF's seems really slow
-# 3. The whole thing is really slow, consider optimizing
+# no, i didnt just delete this before submitting :)
+
+
+def main():
+    """
+    Main; handles argument parsing if called from the command line.
+    -c or --compress [source] [destination (optional)] Compresses the source file, if no destination is provided, the file is saved as [source].lz77
+    -d or --decompress [source] [destination (optional)] Decompresses the source file, if no destination is provided, the file is saved as [source].lz77
+    -cb or --control-bytes [int] Sets the number of control bytes to use for compression
+    """
+    # Set up the argument parser
+    parser = argparse.ArgumentParser(
+        description="LZ77 Compression and Decompression Tool"
+    )
+
+    # Add arguments
+    parser.add_argument(
+        "-c", "--compress",
+        metavar="input_file",
+        nargs="+",
+        help="Compress the input file. Optionally specify the output file."
+    )
+    parser.add_argument(
+        "-d", "--decompress",
+        metavar="input_file",
+        nargs="+",
+        help="Decompress the input file. Optionally specify the output file."
+    )
+    parser.add_argument(
+        "-cb", "--control-bytes",
+        type=int,
+        default=3,
+        help="Specify the control byte length for compression. Default is 3."
+    )
+    # Parse the arguments
+    args = parser.parse_args()
+
+    if args.compress:
+        input_file = args.compress[0]
+        output_file = args.compress[1] if len(args.compress) > 1 else f"{os.path.splitext(input_file)[0]}.Z77"
+        file_extension = os.path.splitext(input_file)[1]  # Extract file extension
+        try:
+            with open(input_file, "rb") as f:
+                raw_data = f.read()
+            compressed_data = LZ77.compress(raw_data, control_bytes=args.control_bytes, extension=file_extension)
+            with open(output_file, "wb") as f:
+                f.write(compressed_data)
+            print(f"Compression successful. File saved to {output_file}.")
+            return 0
+        except Exception as e:
+            print(f"Error during compression: {e}")
+            return 1
+
+    elif args.decompress:
+        input_file = args.decompress[0]
+        output_file = args.decompress[1] if len(args.decompress) > 1 else os.path.splitext(input_file)[0]
+        try:
+            with open(input_file, "rb") as f:
+                compressed_data = f.read()
+            decompressed_data, file_extension = LZ77.decompress(compressed_data)
+            output_file_with_extension = output_file + file_extension
+            with open(output_file_with_extension, "wb") as f:
+                f.write(decompressed_data)
+            print(f"Decompression successful. File saved to {output_file_with_extension}.")
+            return 0
+        except Exception as e:
+            print(f"Error during decompression: {e}")
+            return 1
+
+    else:
+        parser.print_help()
+
 
 @dataclass
 class MatchToken:
@@ -54,35 +123,69 @@ class LiteralToken:
 class LZ77(object):
     literal_buffer = []
     compressed_data = []
-    #All the object variables, kept in a function so they can be dynamically set. (and bc it gets called twice for encoding and decoding)
+    EXTENSION_MAP = {
+        0x0: "",  # No extension
+        0x1: ".txt",
+        0x2: ".bin",
+        0x3: ".jpg",
+        0x4: ".png",
+        0x5: ".pdf",
+        0x6: ".zip",
+        0x7: ".mp3",
+        0x8: ".py",
+        0x9: ".html",
+        0xA: ".md",
+        # Add up to 16 extensions as needed
+    }
     def _var_init(self):
+        """
+        Inits All the object variables, kept in a function so they can be dynamically set.
+        (and bc it gets called twice for encoding and decoding)
+        :return: None
+        """
         # Total bits in the control bytes
         self.total_bits = self.control_byte_length * 8
 
         # Reserve 1 bit for the signal
         usable_bits = self.total_bits - 1
-        self.literal_length_bits = usable_bits; #for literal runs all bits are used for length (- 1 for signal)
-        # Allocate 1/3 of the usable bits to length (rounded down)
-        self.max_pointer_length_bits = usable_bits // 3
-        # Remaining bits are for the distance
-        self.pointer_distance_bits = usable_bits - self.max_pointer_length_bits
+        self.literal_length_bits = usable_bits #for literal runs all bits are used for length (- 1 for signal)
+
+        if self.control_byte_length == 1:
+           #For 1 byte control bytes we must set custom limits (allocating an extra bit for length and one less to pointer)
+            self.max_pointer_length_bits = 3
+            self.pointer_distance_bits = 4
+        else:
+            # Allocate 1/3 of the usable bits to length (rounded down)
+            self.max_pointer_length_bits = usable_bits // 3
+            # Remaining bits are for the distance
+            self.pointer_distance_bits = usable_bits - self.max_pointer_length_bits
 
         # Calculate the actual limits
-        self.max_literal_length = (1 << self.max_pointer_length_bits) - 1
+        self.max_literal_length = (1 << self.literal_length_bits) - 1
         self.max_distance = (1 << self.pointer_distance_bits) - 1
         self.max_pointer_length = (1 << self.max_pointer_length_bits) - 1
+        # self.max_literal_length = 2**self.literal_length_bits -1
+        # self.max_distance = 2**self.pointer_distance_bits -1
+        # self.max_pointer_length = 2**self.max_pointer_length_bits -1
 
         #Set the window size and lookahead buffer size based off of the control byte length
         self.window_size = 2**self.pointer_distance_bits-1 #maximum distance from current position to search buffer, (2/3rd of control byte)
-        self.lookahead_buffer = 2**self.max_pointer_length_bits -1 #7 bits used to store the length of a match
+        self.lookahead_buffer = 2**self.literal_length_bits -1 #7 bits used to store the length of a match
 
 
-    def __init__(self, data, control_bytes = 3):
+    def __init__(self, data, control_bytes = 3,extension=""):
+        """
+        Initializes the LZ77 compressor with the raw data and control byte length.
+        :param data: data to compress as bytes
+        :param control_bytes: (optional) number of control bytes to use default is 3
+        :param extension: (optional) file extension
+        """
         self.logger = logging.getLogger(self.__class__.__name__)
 
         if not (1 <= control_bytes <= 15):
             raise ValueError("control_byte_length must be between 1 and 15.")
         else: self.control_byte_length = control_bytes #Assigns this so _var_init can work it.
+        self.extension = extension
 
         # Assume 'data' is a list or array of integers representing bytes
         #self.raw_data = np.array([bytes(i) for i in data], dtype=np.uint8)
@@ -90,15 +193,16 @@ class LZ77(object):
         self._var_init()
 
     @staticmethod
-    def compress(data, control_bytes=3):
+    def compress(data, control_bytes=3, extension=""):
         """
         Compresses the input data using LZ77.
         :param data: The raw data to compress (bytes-like).
         :param control_bytes: The number of bytes for control structures.
+        :param extension: File extension to encode in the header.
         :return: Compressed data as bytes.
         """
         # Initialize an instance for variable setup and helper methods
-        instance = LZ77(data, control_bytes)
+        instance = LZ77(data, control_bytes,extension)
         instance.tokenize()  # Generate tokens
         return instance.encode()  # Serialize the compressed tokens
 
@@ -107,12 +211,12 @@ class LZ77(object):
         """
         Decompresses the compressed data using LZ77.
         :param to_decompress: The compressed data to decompress (bytes-like).
-        :return: Decompressed data as bytes.
+        :return: Tuple (decompressed data as bytes, file extension as string).
         """
-        # Create a temporary instance to handle the decode
+        #Create an instance to decompress the data
         instance = LZ77(b"")  # Initialize with dummy data
-        return instance.decode(to_decompress)
-
+        decompressed_data = instance.decode(to_decompress)
+        return decompressed_data, instance.extension
 
     def encode(self):
         """
@@ -122,7 +226,7 @@ class LZ77(object):
         #init serialized data array
         serialized_data = bytearray()
         # Generate header, and prepend to data
-        header = self._generate_header()
+        header = self.__generate_header()
         serialized_data.extend(header)
 
         # Generate bitmasks for literals and pointers
@@ -165,7 +269,7 @@ class LZ77(object):
         :return: decoded data as bytes
         """
         # Parse the header
-        control_byte_length, compressed_bytes = self.parse_header(compressed_bytes)
+        control_byte_length, compressed_bytes = self.__parse_header(compressed_bytes)
 
         # Update the control_byte_length dynamically
         self.control_byte_length = control_byte_length
@@ -239,7 +343,7 @@ class LZ77(object):
                 # Current substring from the lookahead buffer
                 substring = lookahead_buffer[:j]
                 # Search for the substring in the search buffer
-                pos = self._find_subarray(search_buffer, substring)
+                pos = self.__find_subarray(search_buffer, substring)
                 if pos != -1:
                     # Update the best match found so far
                     best_match_distance = len(search_buffer) - pos + 1 #idk why +1 but everything was off by one
@@ -251,28 +355,29 @@ class LZ77(object):
 
             #checks min size requirement for match
             if best_match_length > self.control_byte_length:
-                self._createPointer(best_match_distance, best_match_length)
+                self.__createPointer(best_match_distance, best_match_length)
                 i += best_match_length
             else:
                 # No match found; output a literal byte to the literal buffer
                 self.literal_buffer.append(self.raw_data[i])
                 if len(self.literal_buffer)>=self.max_literal_length:
-                    self._createLiteral()
+                    self.__createLiteral()
                 i += 1
 
         # After processing, check if there are remaining literals and create token if neccecary
         if len(self.literal_buffer) > 0:
-            self._createLiteral()
+            self.__createLiteral()
 
         self.logger.info(f"idx: {i}, data_length: {data_length}")
         return self.compressed_data
 
 
-    def _createBitMask(self, isLiteral=True):
+    def __createBitMask(self, isLiteral=True):
         """
         Creates a bitmask used for encoding/decoding based on whether the token is a literal or pointer.
         For literals, the bitmask is used to encode the signal flag and length.
         For pointers, the bitmask is used to encode the signal flag, length, and distance.
+        I don't think this is used anymore, in favor of generating bitmasks in situ
         """
         # The control_byte_length determines the size of the bitmask (in bits).
         total_bits = self.control_byte_length * 8
@@ -295,7 +400,7 @@ class LZ77(object):
 
 
 #create tokens for compressed stream
-    def _createLiteral(self):
+    def __createLiteral(self):
         """
         Creates a literal token from the literal buffer and appends it to the compressed data.
         :return: None
@@ -309,7 +414,7 @@ class LZ77(object):
 
         #self.logger.info(f"Literal: Length= {LiToken.length}, Data= {LiToken.data}")
 
-    def _createPointer(self, distance, length):
+    def __createPointer(self, distance, length):
         """
         Creates a pointer token from the given distance and length, and appends it to the compressed data.
         :param distance: distance to match
@@ -318,13 +423,14 @@ class LZ77(object):
         """
         #creates a pointer token, empties literal buffer before
         if len(self.literal_buffer) > 0:
-            self._createLiteral()
+            self.__createLiteral()
 
         PToken = MatchToken(distance, length)
         self.compressed_data.append(PToken)
         #self.logger.info(f"Pointer: {PToken}")
 
-    def _find_subarray(self, array, subarray):
+    @staticmethod
+    def __find_subarray(array, subarray):
         """
         Helper function to find a subarray within an array.
         :param array:
@@ -340,43 +446,43 @@ class LZ77(object):
                 return k
         return -1
 
-    def _generate_header(self):
+    def __generate_header(self):
         """
         Generates a 2-byte header for the compressed stream.
         Byte 1: Magic number (0xC7 for LZ77-compressed stream).
-        Byte 2: High 4 bits encode the control_byte_length (1–15), low 4 bits reserved.
+        Byte 2: High 4 bits encode the control_byte_length (1–15), low 4 bits reserved for file type encoding.
         :return: 2-byte header as bytes
         """
-
-
         magic_number = 0xC7  # Arbitrary identifier for compressed stream
         control_byte_length_encoded = (self.control_byte_length & 0x0F) << 4  # High nibble
-        reserved = 0x00  # Low nibble reserved for future use
-        header = bytearray([magic_number, control_byte_length_encoded | reserved])
+
+        # Map the file extension to a 4-bit code
+        extension_code = {v: k for k, v in self.EXTENSION_MAP.items()}.get(self.extension, 0x0)  # Default to 0 (no extension)
+        header = bytearray([magic_number, control_byte_length_encoded | extension_code])
         return header
 
-    @staticmethod
-    def parse_header(compressed_stream):
+
+    def __parse_header(self, compressed_stream):
         """
         Parses the 2-byte header from the compressed stream.
-        :param compressed_stream:
-        :return:  Returns the control_byte_length and the remaining stream:
+        :param compressed_stream: Compressed stream as bytes.
+        :return:  Returns the control_byte_length, filetype extension and the remaining stream:
         """
-
-        if len(compressed_stream) <= 2:
+        if len(compressed_stream) < 2:
             raise ValueError("Compressed stream is too short to contain a valid header.")
 
         magic_number = compressed_stream[0]
         if magic_number != 0xC7:
             raise ValueError("Invalid magic number. Not an LZ77-compressed stream.")
 
-        # Extract control_byte_length from the high nibble of the second byte
         control_byte_length = (compressed_stream[1] >> 4) & 0x0F
         if not (1 <= control_byte_length <= 15):
             raise ValueError("Invalid control_byte_length in header.")
 
-        # Return control_byte_length and the rest of the stream
-        return control_byte_length, compressed_stream[2:]
+        extension_code = compressed_stream[1] & 0x0F
+        extension = self.EXTENSION_MAP.get(extension_code, "")
+
+        return control_byte_length, extension, compressed_stream[2:]
 
     #not used within the class, but by other elements to verify the header
     @staticmethod
@@ -395,3 +501,6 @@ class LZ77(object):
         except Exception as e:
             print(f"Error checking header: {e}")
             return False
+
+if __name__ == "__main__":
+    main()
