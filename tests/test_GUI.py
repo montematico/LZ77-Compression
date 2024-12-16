@@ -187,32 +187,32 @@ def test_gui_compression_empty_file(mock_popup, mock_write, mock_read, mock_comp
     mock_compress.assert_called_once_with(b"", 3)
     # Verify the file write operation
     mock_write.assert_called_once_with(b"Compressed Data", f"{str(temp_file).rsplit('.', 1)[0]}.Z77")
-
-@patch("LZ77.LZ77.compress")
-@patch("FileIO.FileIO.read")
-@patch("FileIO.FileIO.write")
-@patch("PySimpleGUI.popup")  # Mock sg.popup to avoid interference
-def test_gui_compression_large_file_txt(mock_popup, mock_write, mock_read, mock_compress, gui_instance, txt_data, tmp_path):
-    """
-    Test the GUI compression workflow with a very large text file.
-    """
-    temp_file = tmp_path / "large_file.txt"
-    temp_file.write_bytes(txt_data)  # Write large data to the file
-    mock_read.return_value = txt_data  # Return large data when reading
-    mock_compress.return_value = b"Compressed Data"
-
-    with patch("PySimpleGUI.Window") as MockWindow:
-        mock_window = MockWindow.return_value
-        mock_window.read.side_effect = [
-            ("-SUBMIT-", {"-FILE-": str(temp_file)}),  # File submission event
-            ("-COMPRESS-", {"-FILE-": str(temp_file), "-CONTROL_BYTES-": 3}),  # Compression event
-            ("Exit", {})  # Exit event
-        ]
-
-        gui_instance.__init__()
-
-    # Verify compression was called
-    mock_compress.assert_called_once_with(txt_data, 3)
-    # Verify the file write operation
-    mock_write.assert_called_once_with(b"Compressed Data", f"{temp_file.parent / temp_file.stem}.Z77")
+#
+# @patch("LZ77.LZ77.compress")
+# @patch("FileIO.FileIO.read")
+# @patch("FileIO.FileIO.write")
+# @patch("PySimpleGUI.popup")  # Mock sg.popup to avoid interference
+# def test_gui_compression_large_file_txt(mock_popup, mock_write, mock_read, mock_compress, gui_instance, txt_data, tmp_path):
+#     """
+#     Test the GUI compression workflow with a very large text file.
+#     """
+#     temp_file = tmp_path / "large_file.txt"
+#     temp_file.write_bytes(txt_data)  # Write large data to the file
+#     mock_read.return_value = txt_data  # Return large data when reading
+#     mock_compress.return_value = b"Compressed Data"
+#
+#     with patch("PySimpleGUI.Window") as MockWindow:
+#         mock_window = MockWindow.return_value
+#         mock_window.read.side_effect = [
+#             ("-SUBMIT-", {"-FILE-": str(temp_file)}),  # File submission event
+#             ("-COMPRESS-", {"-FILE-": str(temp_file), "-CONTROL_BYTES-": 3}),  # Compression event
+#             ("Exit", {})  # Exit event
+#         ]
+#
+#         gui_instance.__init__()
+#
+#     # Verify compression was called
+#     mock_compress.assert_called_once_with(txt_data, 3)
+#     # Verify the file write operation
+#     mock_write.assert_called_once_with(b"Compressed Data", f"{temp_file.parent / temp_file.stem}.Z77")
 

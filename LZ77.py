@@ -261,6 +261,7 @@ class LZ77(object):
                 raise ValueError("Unknown token type encountered during encoding")
 
         # Return the serialized byte stream
+        self.__cleanup()
         return bytes(serialized_data)
 
     def decode(self, compressed_bytes):
@@ -311,6 +312,7 @@ class LZ77(object):
                 # Add to decompressed data
                 decompressed_data.extend(literal_data)
 
+        self.__cleanup()
         return bytes(decompressed_data)
 
     def tokenize(self):
@@ -505,6 +507,14 @@ class LZ77(object):
         except Exception as e:
             print(f"Error checking header: {e}")
             return False, ""
+
+    def __cleanup(self):
+        """
+        Cleans up the object state after encoding/decoding.
+        :return: None
+        """
+        self.literal_buffer = []
+        self.compressed_data = []
 
 if __name__ == "__main__":
     main()

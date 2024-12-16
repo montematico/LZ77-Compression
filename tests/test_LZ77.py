@@ -316,7 +316,7 @@ def test_1_byte_header(data_short):
 
 
 @pytest.mark.parametrize("control_bytes", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
-def test_1_byte_header(data_short, control_bytes):
+def test_n_byte_header(data_short, control_bytes):
     """
     Test 1 control byte edge case with header generation.
     """
@@ -347,7 +347,8 @@ def test_1_byte_compress(txt_data):
     raw_data = txt_data  # Repeated pattern
     compressed = LZ77.compress(raw_data, control_bytes=1)
     decompressed, _ = LZ77.decompress(compressed)
-    assert LZ77.verify_header(compressed) == True, "Header verification failed"
+    is_comp, _ = LZ77.verify_header(compressed)
+    assert  is_comp == True, "Header verification failed"
     assert decompressed == raw_data, "Decompressed data does not match the original data."
 
 

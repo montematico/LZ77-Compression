@@ -9,8 +9,24 @@ import pydoc
 
 if __name__ == "__main__":
 
-    #Generate documentation
+    #"Modern" Compression Loop using static methods
     if True:
+        fp = os.path.join("tests", "test_data", "Act1Scene1.txt")
+        file = fio.read(fp)
+
+        comp = LZ77.compress(file,2,os.path.splitext(fp)[1])  #compresses
+        decomp,_ = LZ77.decompress(comp)
+
+        print("Raw Size:" ,len(file))
+        print("Compressed Size:" , len(comp))
+        print("Decompressed Size:" , len(decomp))
+        print("Compression Ratio:", len(comp)/len(file))
+        print("Compressed and decompressed streams:")
+        print(comp)
+        print(decomp)
+
+    #Generate documentation
+    if False:
         # Generate documentation for all modules
         modules = ["LZ77", "FileIO", "GUI"]  # Add your module names here
         combined_doc = "<html><head><title>Documentation</title></head><body>\n"
@@ -31,28 +47,14 @@ if __name__ == "__main__":
 
         print("Combined documentation written to documentation.html")
 
-    #"Modern" Compression Loop using static methods
-    if True:
-        fp = "Act1Scene1.md"
-        file = fio.read(fp)
 
-        comp = LZ77.compress(file,2,os.path.splitext(fp)[1])  #compresses
-        decomp,_ = LZ77.decompress(comp)
-
-        print("Raw Size:" ,len(file))
-        print("Compressed Size:" , len(comp))
-        print("Decompressed Size:" , len(decomp))
-        print("Compression Ratio:", len(comp)/len(file))
-
-        print(comp)
-        print(decomp)
 
 #The Old Way of doing compression, involves creating an object and calling methods
-    if True: #Compressing loop
+    if False: #Compressing loop
         logging.basicConfig(level=logging.INFO)
         # Sample data
         #fs = fio.FileIO("TESTDATA.txt")
-        data = FileIO.read("TESTDATA.txt")
+        data = fio.read("TESTDATA.txt")
         # Initialize the LZ77 compressor
         lz77 = LZ77.LZ77(data,control_bytes=3)
         lz77.tokenize()  # Generate tokens
@@ -64,15 +66,15 @@ if __name__ == "__main__":
         decompressed_data = lz77.decode(compressed_bytes)
         print("Decompressed Data:", decompressed_data)
 
-    if True: #Encrypting loop
+    if False: #Encrypting loop
         #Encrpyt the compressed data
-        off = crypt.OffsetEncrypt(compressed_bytes,18)
-        compr_encrypted = off.encrypt(compressed_bytes)
+        data = fio.read("TESTDATA.txt")
+        off = crypt.OffsetEncrypt(data,18)
+        compr_encrypted = off.encrypt(data)
         print("Encrypted Data:", compr_encrypted)
 
         raw_decrypted = off.decrypt(compr_encrypted)
         print("Decrypted Data:", raw_decrypted)
 
-    if True: #GUI loop
+    if False: #GUI loop
         g = gui.GUI()
-        g.__init__()

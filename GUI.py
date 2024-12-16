@@ -4,7 +4,6 @@ from FileIO import FileIO as fio
 import os
 
 class GUI:
-
     def __init__(self):
         """
         Main GUI loop, displays the main menu of the GUI and handles events.
@@ -47,11 +46,13 @@ class GUI:
                 # Compression logic
                 file_path = values["-FILE-"]
                 control_bytes = values["-CONTROL_BYTES-"]
-                compressed = LZ77.compress(fio.read(file_path),control_bytes)
+                root, extension = os.path.splitext(file_path)
+                compressed = LZ77.compress(fio.read(file_path),control_bytes,extension)
+
                 sg.popup("Compression complete!", title="Success")
 
                 #Write the compressed data in the same directory as the original file
-                root, _ = os.path.splitext(file_path)
+
                 fwrite_path = root + ".Z77"
                 fio.write(compressed, fwrite_path)
                 self.main_menu(window)
@@ -90,7 +91,7 @@ class GUI:
             window["-DECOMPRESS-"].update(visible=True)
             window["-FILETYPE_TEXT-"].update(visible=True)
             window["-FILETYPE-"].update(visible=True)
-            window["-FILETYPE-"].update(value=extension, visible=True, disabled=False)  # Set the value and disable the input
+            window["-FILETYPE-"].update(value=extension, visible=True, disabled=True)  # Set the value and disable the input
 
             #Compression elements
             window["-CbyteText-"].update(visible=False)
@@ -118,4 +119,8 @@ class GUI:
         #Decompression Elements
         window["-DECOMPRESS-"].update(visible=False)
         window["-FILETYPE_TEXT-"].update(visible=False)
-        window["-FILETYPE-"].update(visible=False)
+        window["-FILETYPE-"].update(value="",visible=False,disabled=False)
+
+
+if __name__ == "__main__":
+    g = GUI()
