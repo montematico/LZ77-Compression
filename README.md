@@ -10,8 +10,7 @@ PySimpleGUI==5.0.7
 pytest==8.3.4
 rsa==4.9
 ```
-\*I've included a `requirements.txt` in my `submission.zip` file. You can recursively install the dependencies using
-`pip install -r requirements.txt`
+
 
 ---
 # Command Line Interface
@@ -38,8 +37,7 @@ My project also has a GUI to enable file compression. It uses pysimpleGUI to ren
 The GUI can be run using `python GUI.py`
 ## Initial State
 In its initial state the user can use the file browser to find a file to either compress/decompress
-![[Pasted image 20241215173932.png]]
-Initial state of GUI
+
 
 ## File Compression
 
