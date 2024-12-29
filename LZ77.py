@@ -205,6 +205,8 @@ class LZ77(object):
         # Initialize an instance for variable setup and helper methods
         instance = LZ77(data, control_bytes,extension)
         instance.tokenize()  # Generate tokens
+        print(f"Raw Length: {len(data)}, Compressed Length: {len(instance.compressed_data)}")
+        print(f"Compression Ratio: {len(instance.compressed_data)/len(data)}")
         return instance.encode()  # Serialize the compressed tokens
 
     @staticmethod
