@@ -19,6 +19,7 @@ it accepts 3 flags
 - `-c --compress [source] [dest*]`  Compress a file
 - `-d --decompress [source] [dest*]` Decompress a file
 - `-cb --control-bytes [int]` range 1,15 byte "control bytes" which dictate length of literal runs or pointers. Larger control bytes are only really practical for *highly* repetitive patterns due to the increased overhead. Default is 3 bytes.
+
 \*dest. is optional; if dest. is not provided compressed file is written to the same directory
 ```shell
 #Compress a file with -c --compress
