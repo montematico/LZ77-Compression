@@ -42,17 +42,17 @@ In its initial state the user can use the file browser to find a file to either 
 Initial state of GUI
 
 ## File Compression
-![[Pasted image 20241215174055.png]]
+
 If the user selects a file that has not been compressed (determined by checking for a header) the GUI presents the Compress button and a counter to increment the amount of control bytes.
-![[Pasted image 20241215174203.png]]
+
 
 ## File Decompression
-![[Pasted image 20241215174229.png]]
+
 If the user selects a file that is compressed (determined based off the header) the GUI will go into compression mode and display the appropriate controls.
 
-The file type input box can be used to specify the decompressed filetype, although this option is disabled (like shown) if the file type is detected in the header.
+The file type input box can be used to specify the decompressed filetype, although this option is disabled if the file type is detected in the header.
 
-![[Pasted image 20241215174358.png]]
+
 
 ---
 
